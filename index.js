@@ -133,7 +133,9 @@ app.use(bodyParser.urlencoded({ extended: false }));
 app.post('/', (req, res) => {
   // GERBIL undocumented subtlety: let them know we speak NIF
   if (_.isEqual(req.body, {})) {
+    console.log('dummy');
     res.end(dummyAnswer);
+    return;
   }
   try {
     // parse received arguments
@@ -148,9 +150,10 @@ app.post('/', (req, res) => {
       argsReceived[arg.long] = value;
     });
   } catch (e) {
+    console.log('error while parsing request');
     console.log(req.body);
     console.log(e);
-    throw new Error('got an error');
+    return;
   }
 
   // set content-type header
