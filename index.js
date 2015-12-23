@@ -107,6 +107,10 @@ const ns = function(prefxs) {
 
 app.use(bodyParser.urlencoded({ extended: false }));
 
+app.get('/', (req, res) => {
+  res.end('ok');
+});
+
 app.post('/', (req, res) => {
   // parse received arguments
   const argsReceived = {};
@@ -193,7 +197,7 @@ app.post('/', (req, res) => {
   // res.end(JSON.stringify(argsReceived, null, 2));
 });
 
-const server = app.listen(3000, 'localhost', () => {
+const server = app.listen(3333, 'localhost', () => {
   const host = server.address().address;
   const port = server.address().port;
 
