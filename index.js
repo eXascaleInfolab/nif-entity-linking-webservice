@@ -131,20 +131,27 @@ const ns = function(prefxs) {
 app.use(bodyParser.urlencoded({ extended: false }));
 
 app.post('/', (req, res) => {
+  // GERBIL undocumented subtlety: let them know we speak NIF
   if (_.isEqual(req.body, {})) {
     res.end(dummyAnswer);
   }
-  // parse received arguments
-  const argsReceived = {};
-  _.map(args, (arg) => {
-    let value;
-    if (req.body[arg.long] || req.body[arg.short]) {
-      value = req.body[arg.long] || req.body[arg.short];
-    } else {
-      value = typeof arg.defaultValue === 'function' ? arg.defaultValue(server.address()) : arg.defaultValue;
-    }
-    argsReceived[arg.long] = value;
-  });
+  try {
+    // parse received arguments
+    const argsReceived = {};
+    _.map(args, (arg) => {
+      let value;
+      if (req.body[arg.long] || req.body[arg.short]) {
+        value = req.body[arg.long] || req.body[arg.short];
+      } else {
+        value = typeof arg.defaultValue === 'function' ? arg.defaultValue(server.address()) : arg.defaultValue;
+      }
+      argsReceived[arg.long] = value;
+    });
+  } catch (e) {
+    console.log(req.body);
+    console.log(e);
+    throw new Error('got an error');
+  }
 
   // set content-type header
   const accept = acceptContentType(accepts(req));
