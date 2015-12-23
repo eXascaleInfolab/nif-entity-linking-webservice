@@ -107,11 +107,10 @@ const ns = function(prefxs) {
 
 app.use(bodyParser.urlencoded({ extended: false }));
 
-app.get('/', (req, res) => {
-  res.end('ok');
-});
-
 app.post('/', (req, res) => {
+  if (_.isEqual(req.body, {})) {
+    res.end('ok');
+  }
   // parse received arguments
   const argsReceived = {};
   _.map(args, (arg) => {
