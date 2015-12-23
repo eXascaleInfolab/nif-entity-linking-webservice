@@ -85,13 +85,36 @@ const incomingContentType = (req) => {
 const buildNIF = (text, prefix) => {
   const length = text.length;
   return `@prefix nif: <http://persistence.uni-leipzig.org/nlp2rdf/ontologies/nif-core#>.
-  @prefix: <${prefix}>.
-  <${prefix}char=0,${length}>
+  @prefix: <${prefix}#>.
+  <${prefix}#char=0,${length}>
     a nif:RFC5147String , nif:Context ;
     nif:beginIndex "0";
     nif:endIndex "${length}";
     nif:isString "${text}". `;
 };
+
+const dummyAnswer = `@prefix nif: <http://persistence.uni-leipzig.org/nlp2rdf/ontologies/nif-core#>.
+  @prefix dbo: <http://dbpedia.org/ontology/>.
+  @prefix owl: <http://www.w3.org/2002/07/owl#>.
+  @prefix itsrdf: <http://www.w3.org/2005/11/its/rdf#>.
+  @prefix prefix: <http://gerbil.exascale.info#> .
+  <http://gerbil.exascale.info#char=0,39>
+    a nif:RFC5147String , nif:Context ;
+    nif:beginIndex "0";
+    nif:endIndex "39";
+    nif:isString "My favorite actress is Natalie Portman." .
+
+  <http://gerbil.exascale.info#char=23,39>
+    a nif:RFC5147String , nif:NamedEntity ;
+    nif:beginIndex "23";
+    nif:endIndex "38";
+    nif:referenceContext <http://gerbil.exascale.info#char=0,39>  ;
+    itsrdf:taIdentRef <http://dbpedia.org/resource/Natalie_Portman> ;
+    itsrdf:taClassRef <http://nerd.eurecom.fr/ontology#Person> , dbo:Actor, dbo:Artist, dbo:Person, dbo:Agent, owl:Thing ;
+    nif:taMsClassRef dbo:Actor .
+
+  <http://dbpedia.org/resource/Natalie_Portman> a <http://nerd.eurecom.fr/ontology#Person> , dbo:Actor, dbo:Artist, dbo:Person, dbo:Agent, owl:Thing .
+  <http://nerd.eurecom.fr/ontology#Person>  <http://nerd.eurecom.fr/ontology#isCoreClass> "1" .`;
 
 const ns = function(prefxs) {
   return {
@@ -109,7 +132,7 @@ app.use(bodyParser.urlencoded({ extended: false }));
 
 app.post('/', (req, res) => {
   if (_.isEqual(req.body, {})) {
-    res.end('ok');
+    res.end(dummyAnswer);
   }
   // parse received arguments
   const argsReceived = {};
