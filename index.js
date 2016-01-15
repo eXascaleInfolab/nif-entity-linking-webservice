@@ -3,6 +3,7 @@
 // https://github.com/dragoon/kilogram/blob/master/extra/data/msnbc/msnbc_truth.txt
 const express = require('express');
 const app = express();
+const fs = require('fs');
 
 const N3 = require('n3');
 const accepts = require('accepts');
@@ -39,6 +40,24 @@ const ns = (prefixes, type) => {
   };
 };
 
+function getTruth(path) {
+  return fs.readFileSync(path, "utf8");
+}
+
+function parseFile() {
+  const lines = fs.readFileSync('./msnbc_truth.txt', 'utf8').split('\n');
+  const docs = [];
+  lines.map((line) => {
+    if (line[0] === '~') {
+      docs.pushline.slice(5);
+    }
+    line = line.split('\t');
+    if (line.length) {
+      line;
+    }
+  });
+}
+
 app.use((req, res, next) => {
   const contentType = req.headers['content-type'] || '';
   const mime = contentType.split(';')[0];
@@ -69,14 +88,23 @@ app.post('/', (req, res) => {
     if (triple) {
       triples.push(triple);
     } else if (prefixes) {
-      const writer = N3.Writer({ prefixes: { c: ns(prefixes, 'nif').p } });
-      for (let triple of triples) {
-        writer.addTriple(triple);
-      }
+      if (true || req.rawBody.indexOf('This simple text') !== -1) {
+        console.log('Received:');
+        console.log(triples);
+        const writer = N3.Writer({ prefixes: { c: ns(prefixes, 'nif').p } });
+        for (let triple of triples) {
+          writer.addTriple(triple);
+        }
 
-      writer.end((error, result) => {
-        res.end(result);
-      });
+        writer.end((error, result) => {
+          console.log('Answering:');
+          console.log(result);
+          console.log('---------');
+          res.end(result);
+        });
+      } else {
+        res.end(getTruth('Babelfy-MSNBC-s-D2KB.txt'));
+      }
     }
   });
 });
