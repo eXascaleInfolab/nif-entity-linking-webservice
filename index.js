@@ -78,7 +78,7 @@ function jsonToNif(input) {
 }
 
 function annotatorPipe(payload) {
-  const res = request('POST', annotatorURL, payload);
+  const res = request('POST', annotatorURL, { json: payload });
   const json = res.getBody('utf8');
   log('Received JSON from annotator');
   log(json);
@@ -149,10 +149,10 @@ app.post('/', (req, res) => {
             mentions[uid].type = N3Util.getLiteralType(atriple.object).split('#')[1];
             break;
           case 'http://persistence.uni-leipzig.org/nlp2rdf/ontologies/nif-core#beginIndex':
-            mentions[uid].start = N3Util.getLiteralValue(atriple.object);
+            mentions[uid].start = parseInt(N3Util.getLiteralValue(atriple.object), 10);
             break;
           case 'http://persistence.uni-leipzig.org/nlp2rdf/ontologies/nif-core#endIndex':
-            mentions[uid].end = N3Util.getLiteralValue(atriple.object);
+            mentions[uid].end = parseInt(N3Util.getLiteralValue(atriple.object), 10);
             break;
           case 'http://persistence.uni-leipzig.org/nlp2rdf/ontologies/nif-core#referenceContext':
             mentions[uid].context = atriple.object.split('#')[1];
@@ -178,7 +178,7 @@ app.post('/', (req, res) => {
         }
         const payload = JSON.stringify({
           mentions: finalMentions,
-          text,
+          text: text.replace('\n', '\\n'),
         });
         log('Sending payload to annotator');
         log(payload);
