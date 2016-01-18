@@ -8,9 +8,9 @@ It is *not* a full implementation of a NIF webservice, pretty much the opposite:
 
 It runs a webservice which acts as middleware between GERBIL and your own entity-linking annotator.
 
-`GERBIL --NIF--> webservice --JSON--> annotator`
-...annotator annotates...
-`GERBIL <--NIF-- webservice <--JSON-- annotator`
+1. `GERBIL --NIF--> webservice --JSON--> annotator`
+2. ...annotator annotates...
+3. `GERBIL <--NIF-- webservice <--JSON-- annotator`
 
 ### JSON API for your entity-linking annotator
 
@@ -20,20 +20,23 @@ Your annotator will receive a JSON like this one:
 {
   "mentions": [
     {
-      "name": "Robinson College",
-      "start": "2898",
-      "end": "2914",
-      "context": "char=0,5253"
+      "name": "Robinson College", // mention to link
+      "start": "2898", // offset
+      "end": "2914", // offset
+      "context": "char=0,5253", // subject anchor
+      "uid": 0 // unique identifier for this mention
     },
     {
       "name": "Home Depot",
       "start": "791",
       "end": "801",
-      "context": "char=0,5253"
+      "context": "char=0,5253",
+      "uid": 1
     },
     ...
   ],
-  "text": "This string contains\nthe full text."
+  "text": "This string contains\nthe full text.", // full text
+  "uid": 0 // unique identifier for this text
 }
 ```
 
@@ -47,17 +50,20 @@ and will have to answer with something like this: (note the addition of the `uri
       "start": "2898",
       "end": "2914",
       "context": "char=0,5253",
-      "uri": "The_New_York_Times"
+      "uri": "http://dbpedia.org/resource/The_New_York_Times",
+      "uid": 0
     },
     {
       "name": "Home Depot",
       "start": "791",
       "end": "801",
       "context": "char=0,5253",
-      "uri": "Home_Depot"
+      "uri": "http://dbpedia.org/resource/Home_Depot",
+      "uid": 1
     },
     ...
-  ]
+  ],
+  "uid": 0
 }
 ```
 
