@@ -3,16 +3,19 @@
 // https://github.com/dragoon/kilogram/blob/master/extra/data/msnbc/msnbc_truth.txt
 const express = require('express');
 const app = express();
-const fs = require('fs');
 
 const N3 = require('n3');
 const N3Util = N3.Util;
 const accepts = require('accepts');
-const llog = require('log-anything');
+const l = require('log-anything');
+const request = require('sync-request');
 
-const debug = false;
+// Configuration
+const debug = true;
+const annotatorURL = '';
+const webservicePort = 3333;
 
-const log = (...args) => (debug ? llog.log(...args) : null);
+const log = (...args) => (debug ? l.log(...args) : null);
 
 const NIF = 'http://persistence.uni-leipzig.org/nlp2rdf/ontologies/nif-core#';
 
@@ -46,8 +49,40 @@ const ns = (prefixes, type) => {
   };
 };
 
-function getTruth(path) {
-  return fs.readFileSync(path, 'utf8');
+function nifMention(mention) {
+  return [`<http://example.com/exascale.txt#char=${mention.start},${mention.end}>`,
+          `      a                     nif:RFC5147String , nif:String ;`,
+          `      nif:anchorOf          "${mention.name}"^^xsd:string ;`,
+          `      nif:beginIndex        "${mention.start}"^^xsd:nonNegativeInteger ;`,
+          `      nif:endIndex          "${mention.end}"^^xsd:nonNegativeInteger ;`,
+          `      nif:referenceContext  <http://example.com/exascale.txt#char=${mention.context}> ;`,
+          `      itsrdf:taConfidence   "1.0"^^xsd:double ;`,
+          `      itsrdf:taIdentRef     <http://dbpedia.org/resource/${mention.uri}> .`,
+          ``].join('\n');
+}
+
+function jsonToNif(input) {
+  const head = ['@prefix rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .',
+                '@prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .',
+                '@prefix itsrdf: <http://www.w3.org/2005/11/its/rdf#> .',
+                '@prefix nif:   <http://persistence.uni-leipzig.org/nlp2rdf/ontologies/nif-core#> .',
+                '@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .',
+                '', ''].join('\n');
+
+  let body = '';
+  for (const mention of input.mentions) {
+    body += nifMention(mention);
+  }
+
+  return head + body;
+}
+
+function annotatorPipe(payload) {
+  const res = request('POST', annotatorURL, payload);
+  const json = res.getBody('utf8');
+  log('Received JSON from annotator');
+  log(json);
+  return jsonToNif(json);
 }
 
 app.use((req, res, next) => {
@@ -70,7 +105,7 @@ app.use((req, res, next) => {
 });
 
 app.post('/', (req, res) => {
-  console.log('Got POST request!');
+  log('Got POST request!');
   // set content-type header
   const accept = acceptContentType(accepts(req));
   res.setHeader('Content-Type', accept.contentType);
@@ -88,7 +123,7 @@ app.post('/', (req, res) => {
     if (triple) {
       triples.push(triple);
     } else if (prefixes) {
-      log('Received:');
+      log('Received triples');
       log(triples);
       const writer = N3.Writer({ prefixes: { c: ns(prefixes, 'nif').p } });
       for (const atriple of triples) {
@@ -105,31 +140,24 @@ app.post('/', (req, res) => {
 
         switch (atriple.predicate) {
           case 'http://persistence.uni-leipzig.org/nlp2rdf/ontologies/nif-core#isString':
-            log('text found');
             text = N3Util.getLiteralValue(atriple.object);
             break;
           case 'http://persistence.uni-leipzig.org/nlp2rdf/ontologies/nif-core#RFC5147String':
-            log('new entity');
             break;
           case 'http://persistence.uni-leipzig.org/nlp2rdf/ontologies/nif-core#anchorOf':
-            log('entity found');
             mentions[uid].name = N3Util.getLiteralValue(atriple.object);
             mentions[uid].type = N3Util.getLiteralType(atriple.object).split('#')[1];
             break;
           case 'http://persistence.uni-leipzig.org/nlp2rdf/ontologies/nif-core#beginIndex':
-            log('start found');
             mentions[uid].start = N3Util.getLiteralValue(atriple.object);
             break;
           case 'http://persistence.uni-leipzig.org/nlp2rdf/ontologies/nif-core#endIndex':
-            log('end found');
             mentions[uid].end = N3Util.getLiteralValue(atriple.object);
             break;
           case 'http://persistence.uni-leipzig.org/nlp2rdf/ontologies/nif-core#referenceContext':
-            log('context found');
             mentions[uid].context = atriple.object.split('#')[1];
             break;
           default:
-            log('thing not found', atriple.predicate);
             break;
         }
 
@@ -145,23 +173,27 @@ app.post('/', (req, res) => {
         const finalMentions = [];
         for (const mention in mentions) {
           if (mentions.hasOwnProperty(mention)) {
-            // console.log(mention);
             finalMentions.push(mentions[mention]);
           }
         }
-        const forFlask = JSON.stringify({
+        const payload = JSON.stringify({
           mentions: finalMentions,
           text,
         });
-        res.end(getTruth('Babelfy-MSNBC-s-D2KB.txt'));
+        log('Sending payload to annotator');
+        log(payload);
+        const nifAnswer = annotatorPipe(payload);
+        log('Answering with nif');
+        log(nifAnswer);
+        res.end(nifAnswer);
       }
     }
   });
 });
 
-const server = app.listen(3333, 'localhost', () => {
+const server = app.listen(webservicePort, 'localhost', () => {
   const host = server.address().address;
   const port = server.address().port;
 
-  log('Example app listening at http://%s:%s', host, port);
+  log('NIF web service listening at http://%s:%s', host, port);
 });
