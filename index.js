@@ -18,6 +18,8 @@ const webservicePort = 3333;
 const log = (...args) => (debug ? l.log(...args) : null);
 
 const NIF = 'http://persistence.uni-leipzig.org/nlp2rdf/ontologies/nif-core#';
+let contextCounter = 0;
+let mentionCounter = 0;
 
 const acceptContentType = (accept) => {
   switch (accept.type(['json', 'html', 'text', 'turtle', 'rdf+xml', 'ld+json', 'n-triples'])) {
@@ -49,19 +51,19 @@ const ns = (prefixes, type) => {
   };
 };
 
-function nifMention(mention) {
-  return [`<http://example.com/exascale.txt#char=${mention.start},${mention.end}>`,
+function nifMention(mention, contextUid) {
+  return [`<http://example.com/exascale/mention/${mention.uid}.txt#char=${mention.start},${mention.end}>`,
           `      a                     nif:RFC5147String , nif:String ;`,
           `      nif:anchorOf          "${mention.name}"^^xsd:string ;`,
           `      nif:beginIndex        "${mention.start}"^^xsd:nonNegativeInteger ;`,
           `      nif:endIndex          "${mention.end}"^^xsd:nonNegativeInteger ;`,
-          `      nif:referenceContext  <http://example.com/exascale.txt#char=${mention.context}> ;`,
+          `      nif:referenceContext  <http://example.com/exascale/context/${contextUid}.txt#${mention.context}> ;`,
           `      itsrdf:taConfidence   "1.0"^^xsd:double ;`,
-          `      itsrdf:taIdentRef     <http://dbpedia.org/resource/${mention.uri}> .`,
-          ``].join('\n');
+          `      itsrdf:taIdentRef     <${mention.uri}> .`,
+          ``, ``].join('\n');
 }
 
-function jsonToNif(input) {
+function jsonToNif(json, text, contextUid) {
   const head = ['@prefix rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .',
                 '@prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .',
                 '@prefix itsrdf: <http://www.w3.org/2005/11/its/rdf#> .',
@@ -69,20 +71,32 @@ function jsonToNif(input) {
                 '@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .',
                 '', ''].join('\n');
 
-  let body = '';
-  for (const mention of input.mentions) {
-    body += nifMention(mention);
-  }
+  const context = json.mentions[0].context;
+  const pos = context.split('=')[1].split(',');
 
-  return head + body;
+  const newText = JSON.stringify(text);
+
+  const tail = [`<http://example.com/exascale/context/${contextUid}.txt#${context}>`,
+                `      a               nif:RFC5147String , nif:String , nif:Context ;`,
+                `      nif:beginIndex  "${pos[0]}"^^xsd:nonNegativeInteger ;`,
+                `      nif:endIndex    "${pos[1]}"^^xsd:nonNegativeInteger ;`,
+                `      nif:isString    ${newText}^^xsd:string .`,
+                ``, ``].join('\n');
+
+  const body = json.mentions.map((x) => nifMention(x, contextUid)).join('');
+
+  return head + body + tail;
 }
 
+
 function annotatorPipe(payload) {
-  const res = request('POST', annotatorURL, { json: payload });
+  const res = request('POST', annotatorURL, {
+    json: payload,
+  });
   const json = res.getBody('utf8');
   log('Received JSON from annotator');
   log(json);
-  return jsonToNif(json);
+  return jsonToNif(JSON.parse(json), payload.text, payload.uid);
 }
 
 app.use((req, res, next) => {
@@ -135,7 +149,8 @@ app.post('/', (req, res) => {
 
         const uid = atriple.subject.split('#')[1];
         if (!mentions.hasOwnProperty(uid)) {
-          mentions[uid] = {};
+          mentions[uid] = { uid: mentionCounter };
+          mentionCounter++;
         }
 
         switch (atriple.predicate) {
@@ -172,14 +187,15 @@ app.post('/', (req, res) => {
       } else {
         const finalMentions = [];
         for (const mention in mentions) {
-          if (mentions.hasOwnProperty(mention)) {
+          if (mentions.hasOwnProperty(mention) && mentions[mention].hasOwnProperty('name')) {
             finalMentions.push(mentions[mention]);
           }
         }
-        const payload = JSON.stringify({
+        const payload = {
           mentions: finalMentions,
-          text: text.replace('\n', '\\n'),
-        });
+          text,
+          uid: contextCounter,
+        };
         log('Sending payload to annotator');
         log(payload);
         const nifAnswer = annotatorPipe(payload);
@@ -189,6 +205,7 @@ app.post('/', (req, res) => {
       }
     }
   });
+  contextCounter++;
 });
 
 const server = app.listen(webservicePort, 'localhost', () => {
