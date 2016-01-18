@@ -75,4 +75,16 @@ and will have to answer with something like this: (note the addition of the `uri
   1. `debug` (bool) print debug info
   2. `annotatorURL` (string) address of the entity-linking annotator
   3. `webservicePort` (int) webservice port
-4. `babel-node index.js > debug.log`
+
+### How to run
+1. (install gerbil to run locally if you'd like)
+2. `babel-node index.js > debug.log` run the webservice
+3. open gerbil's interface (remote or [local](http://localhost:1234/gerbil)) (yep the local port/path is undocumented)
+4. select D2KB
+5. enter a random name for your webservice (it doesn't matter)
+6. enter the webservice URL (could well be `http://localhost:3333`)
+7. click the blue button until it works (!)
+8. select MSNBC
+9. [x] checkbox
+10. click the other blue button
+11. (if you did this in this precise order, it *should* work. Of course, if you forgot a step and want to go back, the "run" button will stay in a disabled state, you'll be in uncharted territory and you'll have to reload the page and start over)
