@@ -6,7 +6,13 @@ const app = express();
 const fs = require('fs');
 
 const N3 = require('n3');
+const N3Util = N3.Util;
 const accepts = require('accepts');
+const llog = require('log-anything');
+
+const debug = false;
+
+const log = (...args) => (debug ? llog.log(...args) : null);
 
 const NIF = 'http://persistence.uni-leipzig.org/nlp2rdf/ontologies/nif-core#';
 
@@ -41,21 +47,7 @@ const ns = (prefixes, type) => {
 };
 
 function getTruth(path) {
-  return fs.readFileSync(path, "utf8");
-}
-
-function parseFile() {
-  const lines = fs.readFileSync('./msnbc_truth.txt', 'utf8').split('\n');
-  const docs = [];
-  lines.map((line) => {
-    if (line[0] === '~') {
-      docs.pushline.slice(5);
-    }
-    line = line.split('\t');
-    if (line.length) {
-      line;
-    }
-  });
+  return fs.readFileSync(path, 'utf8');
 }
 
 app.use((req, res, next) => {
@@ -78,31 +70,82 @@ app.use((req, res, next) => {
 });
 
 app.post('/', (req, res) => {
+  console.log('Got POST request!');
   // set content-type header
   const accept = acceptContentType(accepts(req));
   res.setHeader('Content-Type', accept.contentType);
 
+  // prepare the things
   const parser = N3.Parser({ format: 'Turtle' });
   const triples = [];
+  let dummyRequest = false;
+
+  // get ready for heavy lifting
+  const mentions = []; // { name: '', start: 0, end: 10, misc }, ...
+  let text = '';
+
   parser.parse(req.rawBody, (error, triple, prefixes) => {
     if (triple) {
       triples.push(triple);
     } else if (prefixes) {
-      if (true || req.rawBody.indexOf('This simple text') !== -1) {
-        console.log('Received:');
-        console.log(triples);
-        const writer = N3.Writer({ prefixes: { c: ns(prefixes, 'nif').p } });
-        for (let triple of triples) {
-          writer.addTriple(triple);
+      log('Received:');
+      log(triples);
+      const writer = N3.Writer({ prefixes: { c: ns(prefixes, 'nif').p } });
+      for (const atriple of triples) {
+        if (N3Util.isLiteral(atriple.object) &&
+            N3Util.getLiteralType(atriple.object) === 'http://www.w3.org/2001/XMLSchema#string' &&
+            N3Util.getLiteralValue(atriple.object) === 'This simple text is for testing the communication between the given web service and the GERBIL web service.') {
+          dummyRequest = true;
         }
 
+        const uid = atriple.subject.split('#')[1];
+        if (!mentions.hasOwnProperty(uid)) {
+          mentions[uid] = {};
+        }
+
+        switch (atriple.predicate) {
+          case 'http://persistence.uni-leipzig.org/nlp2rdf/ontologies/nif-core#isString':
+            log('text found');
+            text = N3Util.getLiteralValue(atriple.object);
+            break;
+          case 'http://persistence.uni-leipzig.org/nlp2rdf/ontologies/nif-core#RFC5147String':
+            log('new entity');
+            break;
+          case 'http://persistence.uni-leipzig.org/nlp2rdf/ontologies/nif-core#anchorOf':
+            log('entity found');
+            mentions[uid].name = N3Util.getLiteralValue(atriple.object);
+            mentions[uid].type = N3Util.getLiteralType(atriple.object).split('#')[1];
+            break;
+          case 'http://persistence.uni-leipzig.org/nlp2rdf/ontologies/nif-core#beginIndex':
+            log('start found');
+            mentions[uid].start = N3Util.getLiteralValue(atriple.object);
+            break;
+          case 'http://persistence.uni-leipzig.org/nlp2rdf/ontologies/nif-core#endIndex':
+            log('end found');
+            mentions[uid].end = N3Util.getLiteralValue(atriple.object);
+            break;
+          case 'http://persistence.uni-leipzig.org/nlp2rdf/ontologies/nif-core#referenceContext':
+            log('context found');
+            mentions[uid].context = atriple.object.split('#')[1];
+            break;
+          default:
+            log('thing not found', atriple.predicate);
+            break;
+        }
+
+        writer.addTriple(atriple);
+      }
+
+      if (dummyRequest) {
+        log('Answering to the dummy request!');
         writer.end((error, result) => {
-          console.log('Answering:');
-          console.log(result);
-          console.log('---------');
           res.end(result);
         });
       } else {
+        log('mentions');
+        log(mentions);
+        log('text');
+        log(text);
         res.end(getTruth('Babelfy-MSNBC-s-D2KB.txt'));
       }
     }
@@ -113,5 +156,5 @@ const server = app.listen(3333, 'localhost', () => {
   const host = server.address().address;
   const port = server.address().port;
 
-  console.log('Example app listening at http://%s:%s', host, port);
+  log('Example app listening at http://%s:%s', host, port);
 });
