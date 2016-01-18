@@ -142,10 +142,17 @@ app.post('/', (req, res) => {
           res.end(result);
         });
       } else {
-        log('mentions');
-        log(mentions);
-        log('text');
-        log(text);
+        const finalMentions = [];
+        for (const mention in mentions) {
+          if (mentions.hasOwnProperty(mention)) {
+            // console.log(mention);
+            finalMentions.push(mentions[mention]);
+          }
+        }
+        const forFlask = JSON.stringify({
+          mentions: finalMentions,
+          text,
+        });
         res.end(getTruth('Babelfy-MSNBC-s-D2KB.txt'));
       }
     }
