@@ -12,7 +12,7 @@ const request = require('sync-request');
 
 // Configuration
 const debug = true;
-const annotatorURL = '';
+const annotatorURL = 'http://localhost:5000/entity-linking/d2kb/prior';
 const webservicePort = 3333;
 
 const log = (...args) => (debug ? l.log(...args) : null);
@@ -63,7 +63,9 @@ function nifMention(mention, contextUid) {
           ``, ``].join('\n');
 }
 
-function jsonToNif(json, text, contextUid) {
+function jsonToNif(json, payload) {
+  log('json', json, payload);
+
   const head = ['@prefix rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .',
                 '@prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .',
                 '@prefix itsrdf: <http://www.w3.org/2005/11/its/rdf#> .',
@@ -71,19 +73,19 @@ function jsonToNif(json, text, contextUid) {
                 '@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .',
                 '', ''].join('\n');
 
-  const context = json.mentions[0].context;
+  const context = payload.context;
   const pos = context.split('=')[1].split(',');
 
-  const newText = JSON.stringify(text);
+  const newText = JSON.stringify(payload.text);
 
-  const tail = [`<http://example.com/exascale/context/${contextUid}.txt#${context}>`,
+  const tail = [`<http://example.com/exascale/context/${payload.uid}.txt#${context}>`,
                 `      a               nif:RFC5147String , nif:String , nif:Context ;`,
                 `      nif:beginIndex  "${pos[0]}"^^xsd:nonNegativeInteger ;`,
                 `      nif:endIndex    "${pos[1]}"^^xsd:nonNegativeInteger ;`,
                 `      nif:isString    ${newText}^^xsd:string .`,
                 ``, ``].join('\n');
 
-  const body = json.mentions.map((x) => nifMention(x, contextUid)).join('');
+  const body = json.mentions.map((x) => nifMention(x, payload.uid)).join('');
 
   return head + body + tail;
 }
@@ -93,10 +95,11 @@ function annotatorPipe(payload) {
   const res = request('POST', annotatorURL, {
     json: payload,
   });
+  log(res)
   const json = res.getBody('utf8');
   log('Received JSON from annotator');
   log(json);
-  return jsonToNif(JSON.parse(json), payload.text, payload.uid);
+  return jsonToNif(JSON.parse(json), payload);
 }
 
 app.use((req, res, next) => {
@@ -131,7 +134,10 @@ app.post('/', (req, res) => {
 
   // get ready for heavy lifting
   const mentions = []; // { name: '', start: 0, end: 10, misc }, ...
+  let context = '';
   let text = '';
+  let start = 0;
+  let end = 1;
 
   parser.parse(req.rawBody, (error, triple, prefixes) => {
     if (triple) {
@@ -164,17 +170,19 @@ app.post('/', (req, res) => {
             mentions[uid].type = N3Util.getLiteralType(atriple.object).split('#')[1];
             break;
           case 'http://persistence.uni-leipzig.org/nlp2rdf/ontologies/nif-core#beginIndex':
-            mentions[uid].start = parseInt(N3Util.getLiteralValue(atriple.object), 10);
+            mentions[uid].start = start = parseInt(N3Util.getLiteralValue(atriple.object), 10);
             break;
           case 'http://persistence.uni-leipzig.org/nlp2rdf/ontologies/nif-core#endIndex':
-            mentions[uid].end = parseInt(N3Util.getLiteralValue(atriple.object), 10);
+            mentions[uid].end = end = parseInt(N3Util.getLiteralValue(atriple.object), 10);
             break;
           case 'http://persistence.uni-leipzig.org/nlp2rdf/ontologies/nif-core#referenceContext':
-            mentions[uid].context = atriple.object.split('#')[1];
+            mentions[uid].context = context = atriple.object.split('#')[1];
             break;
           default:
             break;
         }
+
+
 
         writer.addTriple(atriple);
       }
@@ -191,10 +199,12 @@ app.post('/', (req, res) => {
             finalMentions.push(mentions[mention]);
           }
         }
+        if(!context) {context = 'char='+start+','+end};
         const payload = {
           mentions: finalMentions,
           text,
           uid: contextCounter,
+          context 
         };
         log('Sending payload to annotator');
         log(payload);
@@ -208,7 +218,7 @@ app.post('/', (req, res) => {
   contextCounter++;
 });
 
-const server = app.listen(webservicePort, 'localhost', () => {
+const server = app.listen(webservicePort,'localhost', () => {
   const host = server.address().address;
   const port = server.address().port;
 
